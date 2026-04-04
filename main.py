@@ -24,6 +24,8 @@ def translate_message(raw_message):
         return f"签到成功，获得{points}积分 🎉"
     elif raw_message == "Checkin Repeats! Please Try Tomorrow":
         return "重复签到，请明天再试 🔁"
+    elif raw_message == "Today's observation logged. Return tomorrow for more points.":
+        return "今日已签到 ✅"
     elif "please checkin via" in raw_message:
         return "签到失败，请更新Cookie ⚠️"
     else:
@@ -54,8 +56,18 @@ def generate_headers(cookie):
     return {k: sanitize_header_value(v) for k, v in headers.items()}
 
 def format_days(days_str):
-    days = float(days_str)
-    return str(int(days)) if days.is_integer() else f"{days:.2f}"
+    try:
+        days = float(days_str)
+        return str(int(days)) if days.is_integer() else f"{days:.2f}"
+    except:
+        return days_str
+
+def bytes_to_gb(traffic_bytes):
+    """字节转 GB，保留2位小数"""
+    if not traffic_bytes:
+        return "0.00"
+    gb = int(traffic_bytes) / 1024 / 1024 / 1024
+    return f"{gb:.2f}"
 
 def send_webhook(content):
     if not PUSH_WEBHOOK_URL:
@@ -71,6 +83,7 @@ def send_webhook(content):
 def create_retry_session():
     return cffi_requests.Session(impersonate="chrome124")
 
+# ================ 新版：查询 天数 + 流量 ================
 def check_account_status(email, cookie):
     url = "https://glados.cloud/api/user/status"
     headers = generate_headers(cookie)
@@ -78,18 +91,23 @@ def check_account_status(email, cookie):
         r = create_retry_session().get(url, headers=headers, timeout=15)
         data = r.json()
         days = format_days(data['data']['leftDays'])
-        return f"{email} | 剩余 {days} 天"
-    except:
-        return f"{email} | 状态查询失败"
+        traffic = data['data'].get('traffic', 0)
+        traffic_gb = bytes_to_gb(traffic)
+        return days, traffic_gb
+    except Exception as e:
+        print("状态查询异常:", e)
+        return "获取失败", "获取失败"
 
+# ================ 新版：查询积分（只显示整数） ================
 def fetch_points(cookie):
     url = "https://glados.cloud/api/user/points"
     headers = generate_headers(cookie)
     try:
         data = create_retry_session().get(url, headers=headers, timeout=15).json()
-        return f"积分 {data.get('points', 0)}"
+        points = data.get('points', 0)
+        return str(int(float(points)))
     except:
-        return "积分查询失败"
+        return "0"
 
 def sign(email, cookie):
     url = "https://glados.cloud/api/user/checkin"
@@ -121,13 +139,21 @@ def run():
 
         print(f"签到: {email}")
         sign_msg = sign(email, cookie)
-        status_msg = check_account_status(email, cookie)
-        point_msg = fetch_points(cookie)
-        msg_list.append(f"{email}\n结果：{sign_msg}\n状态：{status_msg} | {point_msg}\n")
-        time.sleep(random.randint(2, 5))
+        left_days, traffic = check_account_status(email, cookie)
+        point = fetch_points(cookie)
+        
+        # 排版：每项单独一行
+        msg_list.append(f"📩 账号：{email}")
+        msg_list.append(f"✅ 签到：{sign_msg}")
+        msg_list.append(f"📅 剩余：{left_days} 天")
+        msg_list.append(f"🎯 积分：{point}")
+        msg_list.append(f"📶 流量：{traffic} GB")
+        msg_list.append("-" * 20)  # 分隔线
+        
+        time.sleep(random.randint(2, 4))
 
     final_msg = "\n".join(msg_list)
-    print(final_msg)
+    print("\n" + final_msg)
     send_webhook(final_msg)
 
 if __name__ == "__main__":
