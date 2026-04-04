@@ -63,11 +63,11 @@ def format_days(days_str):
         return days_str
 
 def bytes_to_gb(traffic_bytes):
-    """字节转 GB，保留2位小数"""
+    """字节转 GB，保留3位小数"""
     if not traffic_bytes:
-        return "0.00"
+        return "0.000"
     gb = int(traffic_bytes) / 1024 / 1024 / 1024
-    return f"{gb:.2f}"
+    return f"{gb:.3f}"
 
 def send_webhook(content):
     if not PUSH_WEBHOOK_URL:
@@ -147,7 +147,7 @@ def run():
         msg_list.append(f"✅ 签到：{sign_msg}")
         msg_list.append(f"📅 剩余：{left_days} 天")
         msg_list.append(f"🎯 积分：{point}")
-        msg_list.append(f"📶 流量：{traffic} GB")
+        msg_list.append(f"📶 流量已用：{traffic} GB")
         msg_list.append("-" * 20)  # 分隔线
         
         time.sleep(random.randint(2, 4))
